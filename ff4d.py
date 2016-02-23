@@ -122,7 +122,7 @@ class Dropbox(Operations):
       return False
 
   # Remove item from cache.
-  def removeFromCache(self, path):
+  def removeFromCache(self, path, with_parent=True):
     if debug == True: appLog('debug', 'Called removeFromCache() Path: ' + path)
 
     # Check whether this path exists within cache.
@@ -137,11 +137,13 @@ class Dropbox(Operations):
           if debug == True: appLog('debug', 'Removing from cache: ' + tmp['path'])
           if tmp['path'] in self.cache:
             self.cache.pop(tmp['path'])
-      else:
-        if os.path.dirname(path) in self.cache:
-          if self.cache[os.path.dirname(path)]['is_dir'] == True: 
-            if debug == True: appLog('debug', 'Removing parent path from file in cache')
-            self.cache.pop(os.path.dirname(path))
+
+      if with_parent:
+        parent_item = self.cache.get(os.path.dirname(path))
+        if parent_item:
+          if  parent_item['is_dir'] == True:
+            if debug == True: appLog('debug', 'Cleaning up parent contents')
+            parent_item.pop('contents', None)
       if debug == True: appLog('debug', 'Removing from cache: ' + path)
       self.cache.pop(path)
       return True
@@ -173,18 +175,17 @@ class Dropbox(Operations):
           if debug_raw == True: appLog('debug', 'Data from Dropbox API call: metadata(' + path + ')')
           if debug_raw == True: appLog('debug', str(item))
 
-          # Remove outdated data from cache.
-          self.removeFromCache(path)
+          # Remove outdated data from cache. Since this is just metadata update, we don't delete 'contents' of parent dir
+          self.removeFromCache(path, with_parent=False)
 
           # Cache new data.
           cachets = int(time())+cache_time
           item.update({'cachets':cachets})
           self.cache[path] = item
           for tmp in item['contents']:
-            if tmp['is_dir'] == False:
-              if 'is_deleted' not in tmp or ('is_deleted' in tmp and tmp['is_deleted'] == False):
-                tmp.update({'cachets':cachets})
-                self.cache[tmp['path']] = tmp
+            if 'is_deleted' not in tmp or ('is_deleted' in tmp and tmp['is_deleted'] == False):
+              tmp.update({'cachets':cachets})
+              self.cache[tmp['path']] = tmp
         except Exception, e:
           if debug == True: appLog('debug', 'No remote changes detected for folder: ' + path, traceback.format_exc())
       return item
